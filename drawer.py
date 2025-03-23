@@ -2,13 +2,15 @@ import json
 import graphviz
 from utils import *
 
-def draw_NFA(states: dict):
+def draw_NFA(regex: str, state_machine: dict):
+    states = state_machine["states"]
+
     dot = graphviz.Digraph()
     dot.attr(rankdir="LR")
     dot.attr("node", shape="circle")
     dot.attr(overlap='false')  # Prevents overlapping nodes
 
-    startNode = None
+    startNode = state_machine["entryState"]
     dot.node('start', '', shape='none')
     for state, properties in states.items():
         if properties.get("isTerminatingState", False):
@@ -27,6 +29,5 @@ def draw_NFA(states: dict):
             for dest in destinations:
                 dot.edge(state, dest, label=symbol)
 
+    dot.attr(label=f"Regular Expression: {regex}", fontsize='20', labelloc='t', labeljust='c')
     dot.render('nfa_graph', format='png', cleanup=True)
-    print("NFA graph visualization has been saved as 'nfa_graph.png'")
-    print(dot.source)
