@@ -23,6 +23,9 @@ class Lexer:
         group_stack = []
         matcher_stack = []
         for idx, char in enumerate(self.regex):
+            if len(matcher_stack) > 0 and char not in [']', '-']:
+                continue
+
             match char:
                 case '(':
                     group_stack.append(idx); continue
@@ -51,28 +54,63 @@ class Lexer:
             
         return True
     
+    def tokenize_ranges(self):
+        for key, tokens in self.matchers.items():
+            tokenized_regex = []
+            skip = False
+            for idx, token in enumerate(self.matchers[key]):
+                if skip: 
+                    skip = False
+                    continue
+
+                elif token == "-":
+                    self.ranges[len(self.ranges)] = [ tokenized_regex[-1], tokens[idx+1] ]
+                    tokenized_regex[-1] = (f"RANGE-{len(self.ranges) - 1}")
+                    skip = True
+
+                else:
+                    tokenized_regex.append(token)
+            self.matchers[key] = tokenized_regex
+        
     def two_operands_tokenizer(self, tokens: list[str]):
         tokenized_regex = []
-        skip = False
+        skip = 0
         for idx, token in enumerate(tokens):
             if skip: 
-                skip = False
+                skip -= 1
                 continue
 
             if token == "|":
-                self.matchers[len(self.matchers)] = [ tokenized_regex[-1], tokens[idx+1] ]
-                tokenized_regex[-1] = (f"MATCHER-{len(self.matchers) - 1}")
-                skip = True
+                try:
+                    next_or = idx + 1 + tokens[idx + 1 : ].index("|")
+                except ValueError:
+                    next_or = len(tokens)
+                
+                if len(tokenized_regex) > 1:
+                    self.groups[ len(self.groups) ] = tokenized_regex.copy()
+                    tokenized_regex[:] = [f"GROUP-{len(self.groups) - 1}"]
 
-            elif token == "-":
-                self.ranges[len(self.ranges)] = [ tokenized_regex[-1], tokens[idx+1] ]
-                tokenized_regex[-1] = (f"RANGE-{len(self.ranges) - 1}")
-                skip = True
+                next_token = tokens[idx+1]
+                if next_or > 1:
+                    self.groups[len(self.groups)] = tokens[idx+1 : next_or]
+                    next_token = f"GROUP-{len(self.groups) - 1}"
+
+                self.matchers[len(self.matchers)] = [tokenized_regex[-1], next_token]
+                tokenized_regex[:] = [f"MATCHER-{len(self.matchers) - 1}"]
+                skip = next_or - idx - 1
 
             else:
                 tokenized_regex.append(token)
 
         return tokenized_regex
+    
+    def make_matcher_bad(self, tokens: str):
+        prev = tokens[0]
+        for token in tokens[1:]:
+            self.matchers[len(self.matchers)] = [prev, token]
+            prev = f"MATCHER-{len(self.matchers) - 1}"
+        return prev
+
     
     def tokenize(self, regex: str = None):
         if regex is None:
@@ -83,6 +121,10 @@ class Lexer:
         inter_regex = []
 
         for char in regex:
+            if len(matcher_stack) > 0 and char not in [']', '-']:
+                inter_regex.append(char)
+                continue
+
             match char:
                 case '(':
                     group_stack.append(len(inter_regex)); continue
@@ -105,6 +147,10 @@ class Lexer:
                     continue
                 
                 case '*' | '+' | '?':
+                    if len(matcher_stack) > 0:
+                        inter_regex.append(char)
+                        continue
+                    
                     target = inter_regex[-1]
                     inter_regex[-1] = f"QUANTIFIER-{len(self.quantifiers)}"
                     self.quantifiers[len(self.quantifiers)] = (char, target)
@@ -114,24 +160,20 @@ class Lexer:
         
         inter_regex = self.two_operands_tokenizer(inter_regex)
 
-        for key in self.quantifiers.keys():
+        self.tokenize_ranges()
+
+        for key in list(self.quantifiers.keys()):
             self.quantifiers[key] = self.two_operands_tokenizer(self.quantifiers[key])
 
-        for key in self.groups.keys():
+        for key in list(self.groups.keys()):
             self.groups[key] = self.two_operands_tokenizer(self.groups[key])
 
-        for key in self.matchers.keys():
-            self.matchers[key] = self.two_operands_tokenizer(self.matchers[key])
-
-        for key in self.ranges.keys():
+        for key in list(self.ranges.keys()):
             self.ranges[key] = self.two_operands_tokenizer(self.ranges[key])
+
+        for matcher in list(self.matchers.keys()):
+            self.matchers[matcher] = [self.make_matcher_bad(self.matchers[matcher])]
 
         self.tokenized_regex = inter_regex
         return self.tokenized_regex
     
-# lexer = Lexer("ab[cd]?xyz")
-# print(lexer.tokenized_regex)
-# print(lexer.groups)
-# print(lexer.matchers)
-# print(lexer.ranges)
-# print(lexer.quantifiers)

@@ -46,7 +46,6 @@ class DFA:
         for state in self.states.values():
             transitions = {}
             for key, value in state.transitions.items():
-                print(value)
                 transitions[key] = [ f"{v}" for v in value ]
 
             jsonObj.update({

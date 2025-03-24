@@ -1,6 +1,4 @@
-import json
 import graphviz
-from utils import *
 
 def draw_NFA(regex: str, state_machine: dict):
     states = state_machine["states"]
@@ -9,14 +7,13 @@ def draw_NFA(regex: str, state_machine: dict):
     dot.attr(rankdir="LR")
     dot.attr("node", shape="circle")
     dot.attr(overlap='false')  # Prevents overlapping nodes
-
+    
     startNode = state_machine["entryState"]
     dot.node('start', '', shape='none')
     for state, properties in states.items():
         if properties.get("isTerminatingState", False):
             dot.node(state, state, shape='doublecircle')
         else:
-            startNode = state if properties.get("isEntry", True) else startNode
             dot.node(state, state, shape='circle')
 
     dot.edge('start', startNode)

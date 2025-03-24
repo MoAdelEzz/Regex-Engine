@@ -90,8 +90,3 @@ class Parser:
 
         self.nodes = nodes
         return nodes
-
-
-# lexer = Lexer("ab[cd]?xyz")
-# parser = Parser(lexer)
-# parser.parse()
