@@ -4,14 +4,18 @@ from parser import Parser
 from nfa import NFA
 from dfa import DFA
 from minimized_dfa import MinDfa
-import json
-
+from helper import *
 
 # PASSED
 
+regex = "(a*?)*"
+# regex = "ab*"
+# regex = "a|bc"
+# regex = "[ab]"
+# regex = "b*c+d"
 # regex = "ab*c+de?(f|g|h)|mr|n|[pq]"
-# regex = "(a*)*"
-regex = "(a*b*)([a-b]*)"
+# regex = "a+"
+# regex = "(a*b*)([a-b]*)"
 # regex = "(a|b)*a[ab]?"
 # regex = "(a*b)(b*a+)"
 # regex = "(a+*a+*)+*b"
@@ -41,19 +45,18 @@ regex = "(a*b*)([a-b]*)"
 # regex = "Aym(O|o)na?"
 # regex = "a(b|cd(e|f))d"
 
-# regex = "ab*"
 
 lexer = Lexer(regex)
 parser = Parser(lexer)
 nfa = NFA(parser.nodes)
+state_machine = nfa.ToJson()
+DrawSM(regex, state_machine)
 
-dfa = DFA()
-dfa.convert(nfa.to_json())
-state_machine = dfa.to_json()
+dfa = DFA(nfa.ToJson())
+state_machine = dfa.ToJson()
+DrawSM(regex, state_machine)
 
-min_dfa = MinDfa(dfa.to_json())
-min_dfa.minimize()
+min_dfa = MinDfa(dfa.ToJson())
+min_dfa.Minimize()
 state_machine = min_dfa.merge()
-
-# print(nfa.test("mohammedAdel123"))
-draw_NFA(regex, state_machine)
+DrawSM(regex, state_machine)

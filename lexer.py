@@ -1,179 +1,138 @@
+from __future__ import annotations
+
 class Lexer:
     iter: int
-    tokenized_regex: list[str]
-    groups: dict
-    matchers: dict
-    ranges: dict
-    quantifiers: dict
-    def __init__(self, regex: str):
+    tokenizedRegex: list[str]
+    groups      : dict[str, list[str]]
+    matchers    : dict[str, list[str]]
+    ranges      : dict[str, list[str]]
+    quantifiers : dict[str, list[str]]
+
+    def __init__(self: Lexer, regex: str):
         self.regex = regex
         self.iter = 0
         self.groups = {}
         self.matchers = {}
         self.ranges = {}
         self.quantifiers = {}
-        self.tokenized_regex = []
-        self.validate()
-        self.tokenize()
+        self.tokenizedRegex = []
+        self.Validate()
+        self.tokenizedRegex = self.Tokenize(regex)
 
-    def reset(self):
-        self.iter = 0
-
-    def validate(self):
-        group_stack = []
-        matcher_stack = []
+    def Validate(self: Lexer) -> None:
+        groupStack = []
+        matcherStack = []
         for idx, char in enumerate(self.regex):
-            if len(matcher_stack) > 0 and char not in [']', '-']:
+            if len(matcherStack) > 0 and char not in [']', '-']:
                 continue
 
             match char:
                 case '(':
-                    group_stack.append(idx); continue
+                    groupStack.append(idx)
                 case '[':
-                    matcher_stack.append(idx); continue
+                    matcherStack.append(idx)
                 case ')':
-                    if len(group_stack) == 0:
+                    if len(groupStack) == 0:
                         raise Exception(f"Invalid regex at position {idx}, no opening parenthesis for closing parenthesis")
-                    group_stack.pop(); continue
+                    groupStack.pop()
                 case ']':
-                    if len(matcher_stack) == 0:
+                    if len(matcherStack) == 0:
                         raise Exception(f"Invalid regex at position {idx}, no opening bracket for closing bracket")
-                    matcher_stack.pop(); continue
+                    matcherStack.pop()
                 case '*' | '+' | '?':
                     if idx == 0 or self.regex[idx-1] in ['|', '*', '+', '?', '-', '(', '[']: 
                         raise Exception(f"Invalid regex at position {idx}, multiple quantifiers")
-                    continue
                 case '-' | '|':
-                    if idx == 0 or self.regex[idx-1] in ['|', '*', '+', '?', '-', '(', '[']: 
-                        raise Exception(f"Invalid regex at position {idx}")
+                    if idx == 0 or self.regex[idx-1] in ['|', '-', '(', '[']: 
+                        raise Exception(f"Invalid regex at position {idx}, nothing before operator")
                     if idx == len(self.regex) - 1 or self.regex[idx+1] in ['|', '*', '+', '?', '-', ')', ']']:
-                        raise Exception(f"Invalid regex at position {idx}")
+                        raise Exception(f"Invalid regex at position {idx}, nothing after operator")
         
-        if len(group_stack) != 0 or len(matcher_stack) != 0:
+        if len(groupStack) != 0 or len(matcherStack) != 0:
             raise Exception(f"No closing parenthesis or bracket at the end of the regex")
-            
-        return True
-    
-    def tokenize_ranges(self):
-        for key, tokens in self.matchers.items():
-            tokenized_regex = []
-            skip = False
-            for idx, token in enumerate(self.matchers[key]):
-                if skip: 
-                    skip = False
-                    continue
-
-                elif token == "-":
-                    self.ranges[len(self.ranges)] = [ tokenized_regex[-1], tokens[idx+1] ]
-                    tokenized_regex[-1] = (f"RANGE-{len(self.ranges) - 1}")
-                    skip = True
-
-                else:
-                    tokenized_regex.append(token)
-            self.matchers[key] = tokenized_regex
-        
-    def two_operands_tokenizer(self, tokens: list[str]):
-        tokenized_regex = []
-        skip = 0
-        for idx, token in enumerate(tokens):
-            if skip: 
-                skip -= 1
-                continue
-
-            if token == "|":
-                try:
-                    next_or = idx + 1 + tokens[idx + 1 : ].index("|")
-                except ValueError:
-                    next_or = len(tokens)
                 
-                if len(tokenized_regex) > 1:
-                    self.groups[ len(self.groups) ] = tokenized_regex.copy()
-                    tokenized_regex[:] = [f"GROUP-{len(self.groups) - 1}"]
+    def TokenizeRanges(self: Lexer) -> None:
+        for matcherKey, tokens in self.matchers.items():
+            result = []
+            dashPositions = [-2] + [ idx for idx, token in enumerate(tokens) if token == "-" ] + [len(tokens) + 1]
+            for prev, curr in zip(dashPositions, dashPositions[1:]):
+                result.extend(tokens[prev + 2 : curr - 1])
+                if curr < len(tokens):
+                    self.ranges[len(self.ranges)] = [ tokens[curr - 1], tokens[curr + 1] ]
+                    result.append(f"RANGE-{len(self.ranges) - 1}")
+            
+            self.matchers[matcherKey] = result
 
-                next_token = tokens[idx+1]
-                if next_or > 1:
-                    self.groups[len(self.groups)] = tokens[idx+1 : next_or]
-                    next_token = f"GROUP-{len(self.groups) - 1}"
-
-                self.matchers[len(self.matchers)] = [tokenized_regex[-1], next_token]
-                tokenized_regex[:] = [f"MATCHER-{len(self.matchers) - 1}"]
-                skip = next_or - idx - 1
-
-            else:
-                tokenized_regex.append(token)
-
-        return tokenized_regex
-    
-    def make_matcher_bad(self, tokens: str):
-        prev = tokens[0]
+    def SerializedOring(self: Lexer, tokens: list[str]) -> str:
+        result = tokens[0]
         for token in tokens[1:]:
-            self.matchers[len(self.matchers)] = [prev, token]
-            prev = f"MATCHER-{len(self.matchers) - 1}"
-        return prev
-
+            self.matchers[len(self.matchers)] = [result, token]
+            result = f"MATCHER-{len(self.matchers) - 1}"
+        return result
     
-    def tokenize(self, regex: str = None):
-        if regex is None:
-            regex = self.regex
+    def TokenizePipeOperator(self: Lexer, tokens: list[str]) -> list[str]:
+        pipePositions = [-1] + [ idx for idx, token in enumerate(tokens) if token == "|" ] + [len(tokens) + 1]
+        
+        if len(pipePositions) == 2:
+            return tokens
 
-        group_stack = []
-        matcher_stack = []
-        inter_regex = []
+        groupedTokens = []
+        for prev, curr in zip(pipePositions, pipePositions[1:]):
+            if curr - (prev + 1) == 1:
+                groupedTokens.append(tokens[prev + 1])
+            else:
+                self.groups[len(self.groups)] = tokens[prev + 1 : curr]
+                groupedTokens.append(f"GROUP-{len(self.groups) - 1}")
+                
+        return [ self.SerializedOring(groupedTokens) ]
+    
+    def Tokenize(self: Lexer, regex: str) -> list[str]:
+        groupStack = []
+        matcherStack = []
+        interRegex = []
 
         for char in regex:
-            if len(matcher_stack) > 0 and char not in [']', '-']:
-                inter_regex.append(char)
+            if len(matcherStack) > 0 and char not in [']', '-']:
+                interRegex.append(char)
                 continue
 
             match char:
                 case '(':
-                    group_stack.append(len(inter_regex)); continue
+                    groupStack.append(len(interRegex)); continue
                 
                 case '[':
-                    matcher_stack.append(len(inter_regex)); continue
+                    matcherStack.append(len(interRegex)); continue
                 
                 case ')':
-                    inter_regex_start = group_stack[-1]
-                    self.groups[ len(self.groups) ] = inter_regex[ inter_regex_start : ]
-                    inter_regex[ inter_regex_start : ] = [f"GROUP-{len(self.groups) - 1}"]
-                    group_stack.pop(); 
+                    inter_regex_start = groupStack[-1]
+                    self.groups[ len(self.groups) ] = interRegex[ inter_regex_start : ]
+                    interRegex[ inter_regex_start : ] = [f"GROUP-{len(self.groups) - 1}"]
+                    groupStack.pop(); 
                     continue
                 
                 case ']':
-                    inter_regex_start = matcher_stack[-1]
-                    self.matchers[ len(self.matchers) ] = inter_regex[ inter_regex_start : ]
-                    inter_regex[ inter_regex_start : ] = [f"MATCHER-{len(self.matchers) - 1}"]
-                    matcher_stack.pop()
+                    inter_regex_start = matcherStack[-1]
+                    self.matchers[ len(self.matchers) ] = interRegex[ inter_regex_start : ]
+                    interRegex[ inter_regex_start : ] = [f"MATCHER-{len(self.matchers) - 1}"]
+                    matcherStack.pop()
                     continue
                 
                 case '*' | '+' | '?':
-                    if len(matcher_stack) > 0:
-                        inter_regex.append(char)
+                    if len(matcherStack) > 0:
+                        interRegex.append(char)
                         continue
                     
-                    target = inter_regex[-1]
-                    inter_regex[-1] = f"QUANTIFIER-{len(self.quantifiers)}"
+                    target = interRegex[-1]
+                    interRegex[-1] = f"QUANTIFIER-{len(self.quantifiers)}"
                     self.quantifiers[len(self.quantifiers)] = (char, target)
                 
                 case _:
-                    inter_regex.append(char)
-        
-        inter_regex = self.two_operands_tokenizer(inter_regex)
+                    interRegex.append(char)
 
-        self.tokenize_ranges()
+        self.TokenizeRanges()
+        interRegex = self.TokenizePipeOperator(interRegex)
+        for collection in [self.quantifiers, self.groups, self.ranges]:
+            for key in list(collection.keys()):
+                collection[key] = self.TokenizePipeOperator(collection[key])
 
-        for key in list(self.quantifiers.keys()):
-            self.quantifiers[key] = self.two_operands_tokenizer(self.quantifiers[key])
-
-        for key in list(self.groups.keys()):
-            self.groups[key] = self.two_operands_tokenizer(self.groups[key])
-
-        for key in list(self.ranges.keys()):
-            self.ranges[key] = self.two_operands_tokenizer(self.ranges[key])
-
-        for matcher in list(self.matchers.keys()):
-            self.matchers[matcher] = [self.make_matcher_bad(self.matchers[matcher])]
-
-        self.tokenized_regex = inter_regex
-        return self.tokenized_regex
-    
+        return interRegex

@@ -2,61 +2,65 @@ from dfa import DFA
 
 class MinDfa:
     def __init__(self, dfaJson: dict):
-        self.entry_state = dfaJson["entryState"]
-        state_count = len(dfaJson["states"])
-        self.dfa_states = dfaJson["states"]
-        self.key_idx = { key: idx for idx, key in enumerate(dfaJson["states"].keys()) }
-        self.idx_key = { idx: key for idx, key in enumerate(dfaJson["states"].keys()) }
-        self.distinguishable = [[True for _ in range(state_count)] for __ in range(state_count)]
+        self.entryState = dfaJson["entryState"]
+        self.dfaStates  = dfaJson["states"]
+        self.key_idx    = { key: idx for idx, key in enumerate(dfaJson["states"].keys()) }
+        self.idx_key    = { idx: key for idx, key in enumerate(dfaJson["states"].keys()) }
 
-
-    def init_distinguishables(self):
-        terminal_states = [ key for key, state in self.dfa_states.items() if state["isTerminatingState"] ]
-
-        for key in self.dfa_states.keys():
-            self.distinguishable[self.key_idx[key]][self.key_idx[key]] = False
-            if key not in terminal_states:
-                for key2 in terminal_states:
-                    self.distinguishable[self.key_idx[key]][self.key_idx[key2]] = False
-                    self.distinguishable[self.key_idx[key2]][self.key_idx[key]] = False
-    
-    def get_common_transitions(self, state1, state2):
-        transition_1 = self.dfa_states[state1].keys()
-        transition_2 = self.dfa_states[state2].keys()
-
+    def GetIntersectedTransitions(self, state1, state2):
+        transition_1 = self.dfaStates[state1].keys()
+        transition_2 = self.dfaStates[state2].keys()
         if transition_1 != transition_2: return False, []
-        else: return True, list([ t for t in transition_1 if t not in ["isTerminatingState", "isEntry"] ])
+        else: return True, list([ t for t in transition_1 if t not in ["isTerminatingState"] ])
     
+    def WhichPartition(self, state):
+        for idx, partition in enumerate(self.partition):
+            if state in partition: return idx
+        return -1
 
-    def same_destinations(self, state1, state2, transition):
-        destination_1 = self.dfa_states[state1][transition]
-        destination_2 = self.dfa_states[state2][transition]
+    def SameDestinations(self, state1, state2, transition):
+        destination_1 = [ self.WhichPartition(s) for s in self.dfaStates[state1][transition] ]
+        destination_2 = [ self.WhichPartition(s) for s in self.dfaStates[state2][transition] ]
         return set(destination_1) == set(destination_2)
+    
+    def Split(self, group: set[str]):
+        split_groups = []
+        representative = next(iter(group))
+        current_group = { representative }
 
-   
+        for state in group:
+            if state == representative: continue
 
-    def minimize(self):
-        self.init_distinguishables()
-        print(self.idx_key)
+            isSame, transitions = self.GetIntersectedTransitions(representative, state)
+            for t in transitions:
+                isSame &= self.SameDestinations(representative, state, t)
 
-        for i in range(len(self.distinguishable)):
-            for j in range(i):
-                same_transitions, transitions = self.get_common_transitions(self.idx_key[i], self.idx_key[j])
-                same_desitinations = True
+            if isSame:
+                current_group.add(state)
+            else:
+                split_groups.append({state})
 
-                for t in transitions:
-                    same_desitinations &= self.same_destinations(self.idx_key[i], self.idx_key[j], t)
+        return split_groups + [ current_group ]
 
-                if same_transitions and same_desitinations: 
-                    self.distinguishable[i][j] = False
-                    self.distinguishable[j][i] = False
+    def Minimize(self):
+        self.partition = [
+            { key for key, state in self.dfaStates.items() if state["isTerminatingState"] },
+            { key for key, state in self.dfaStates.items() if not state["isTerminatingState"] }
+        ]
+        self.partition = [ s for s in self.partition if len(s) > 0 ]
 
+        while True:
+            new_partition = []
+            for group in self.partition:
+                if len(group) == 1: 
+                    new_partition.append(group)
                 else:
-                    self.distinguishable[i][j] = True
-                    self.distinguishable[j][i] = True
+                    new_partition.extend(self.Split(group))
 
+            if len(new_partition) == len(self.partition): break
+            self.partition = new_partition
 
-        # print(self.distinguishable)
+        return True
     
     def get_set_object(self, sets: dict[int, set], state_set_map: dict[int, int]):
         set_objects: dict = {
@@ -72,10 +76,10 @@ class MinDfa:
 
             if set_objects["entryState"] is None:
                 for state in states:
-                    if state == self.entry_state: 
+                    if state == self.entryState: 
                         set_objects["entryState"] = f"S{state_set_map[state]}"
 
-            for token, destinations in self.dfa_states[list(states)[0]].items():
+            for token, destinations in self.dfaStates[list(states)[0]].items():
                 if token in ["isTerminatingState", "isEntry"]: 
                     set_object["isTerminatingState"] |= destinations if token == "isTerminatingState" else False
                     continue
@@ -93,17 +97,12 @@ class MinDfa:
 
     def merge(self):
         sets: dict[int, set] = {}
-        state_set_map: dict[int, int] = {}
+        state_set_map = {}
 
-        for i in range(len(self.distinguishable)):
-            if self.idx_key[i] not in state_set_map:
-                sets[len(sets)] = set()
-                state_set_map[self.idx_key[i]] = len(sets) - 1
-
-            for j in range(len(self.distinguishable)):
-                if self.distinguishable[i][j] == False:
-                    sets[state_set_map[self.idx_key[i]]].add(self.idx_key[j])
-                    state_set_map[self.idx_key[j]] = state_set_map[self.idx_key[i]]
+        for p in self.partition:
+            sets[len(sets)] = p
+            for state in p:
+                state_set_map[state] = len(sets) - 1 
 
         return self.get_set_object(sets, state_set_map)
 

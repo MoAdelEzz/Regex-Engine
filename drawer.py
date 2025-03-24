@@ -1,15 +1,15 @@
 import graphviz
 
-def draw_NFA(regex: str, state_machine: dict):
-    states = state_machine["states"]
-
+def DrawSM(regex: str, stateMachine: dict, title: str=""):
     dot = graphviz.Digraph()
     dot.attr(rankdir="LR")
     dot.attr("node", shape="circle")
-    dot.attr(overlap='false')  # Prevents overlapping nodes
-    
-    startNode = state_machine["entryState"]
+    dot.attr(overlap='false')
     dot.node('start', '', shape='none')
+
+    startNode = stateMachine["entryState"]
+    states = stateMachine["states"]
+
     for state, properties in states.items():
         if properties.get("isTerminatingState", False):
             dot.node(state, state, shape='doublecircle')
@@ -21,8 +21,6 @@ def draw_NFA(regex: str, state_machine: dict):
         for symbol, destinations in properties.items():
             if symbol in ["isTerminatingState", "isEntry"]:
                 continue
-            
-            # Add edges for each destination
             for dest in destinations:
                 dot.edge(state, dest, label=symbol)
 

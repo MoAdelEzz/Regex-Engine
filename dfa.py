@@ -1,90 +1,91 @@
-from nfa import NFA, State
+from __future__ import annotations
+from helper import *
 
-
-EPSILON = "ε"
 class DFA:
-    entry_state: int
+    entryState: int
     states: dict[int, State]
-    def __init__(self):
-        self.states = {}
-        self.entry_state = 0
-        pass
+    def __init__(self: DFA, nfaJson: dict):
+        global STATE_COUNTER
+        STATE_COUNTER = 0
 
-    def create_mega_state(self, name):
+        self.states = {}
+        self.entryState = 0
+        self.nfaJson = nfaJson
+
+        self.Convert()
+
+    def CreateMegaState(self: DFA, nodeName: str):
         state = State()
-        self.states[name] = state
+        self.states[nodeName] = state
         return state
 
-    def add_transition(self, start, end, value):
-        if value not in self.states[start].transitions.keys():
-            self.states[start].transitions[value] = set()
-        self.states[start].transitions[value].add(end)
+    def AddTransition(self: DFA, startState: int, exitState: int, characters: str):
+        self.states[startState].transitions.setdefault(characters, set()).add(exitState)
 
-    def get_set_transitions(self, states: dict, states_set: list[int]):
-        transitions = {}
+    def GetMergedTransitions(self: DFA, states_set: list[int]):
+        states = self.nfaJson["states"]
+        mergedTransitions = {}
         for state in states_set:
-            for key, value in states[state].items():
-                if key in ["isTerminatingState", "isEntry", EPSILON]: continue
-                if key not in transitions.keys():
-                    transitions[key] = set()
-                transitions[key].update(value)
-        return transitions
-
-    def epsilon_closure_states(self, states: dict, start_states: list[int], visited: set = set()):
-        ret = start_states
-        epsilon_moves = [ states[state][EPSILON] for state in start_states if EPSILON in states[state].keys() ] 
-        for state in epsilon_moves:
-            key = "-".join(list(set(state)))
-            if key in visited: continue
-            visited.add(key)
-            ret += self.epsilon_closure_states(states, state, visited)
-        return list(set(ret))
-    
-    def to_json(self):
-        jsonObj = {}
-
-        for state in self.states.values():
-            transitions = {}
-            for key, value in state.transitions.items():
-                transitions[key] = [ f"{v}" for v in value ]
-
-            jsonObj.update({
-                f"{state.name}" : { 
-                    "isTerminatingState" : state.isTerminatingState, 
-                    "isEntry" : state.isEntry, 
-                } | transitions
+            mergedTransitions.update({
+                key: mergedTransitions.get(key, set()).union(value)
+                for key, value in states[state].items()
+                if key not in [EPSILON, "isTerminatingState"]
             })
+        return mergedTransitions
+
+    def EpsilonMoveNeighbors(self: DFA, root: list[int], visited: set = None) -> list[int]:
+        if visited is None:
+            visited = set()
+
+        rootKey = "-".join(list(set(root)))
+        if rootKey in visited: return []
+        visited.add(rootKey)
+
+        states = self.nfaJson["states"]
+        epsilonMoveNeighbor = [ states[state][EPSILON] for state in root if EPSILON in states[state].keys() ] 
+
+        for neighbor in epsilonMoveNeighbor:
+            root += self.EpsilonMoveNeighbors(neighbor, visited)
+
+        return list(set(root))
+    
+    def ToJson(self: DFA):
+        name_id = { state.name: str(state.id) for state in self.states.values() }
 
         return {
-            "entryState" : f"{self.entry_state}",
-            "states" : jsonObj
+            "entryState": name_id[self.entryState],
+            "states": {
+                f"{name_id[state.name]}": {
+                    "isTerminatingState": state.isTerminatingState,
+                    **{key: [name_id[v] for v in value] for key, value in state.transitions.items()}
+                } for state in self.states.values()
+            }
         }
 
 
-    def convert(self, jsonObj: dict):
-        entry_state = jsonObj["entryState"]
-        states = jsonObj["states"]
+    def Convert(self: DFA):
+        entryState = self.nfaJson["entryState"]
+        states = self.nfaJson["states"]
 
-        queue = [([entry_state], None, None)]
+        queue = [([entryState], None, None)]
         while len(queue) > 0:
             current_states, parent, key = queue.pop(0)
 
-            mega_state_components = self.epsilon_closure_states(states, list(current_states), set())
-            mega_state_transitions = self.get_set_transitions(states, mega_state_components)
+            mega_state_components = self.EpsilonMoveNeighbors(list(current_states), set())
+            mega_state_transitions = self.GetMergedTransitions(mega_state_components)
             mega_state_name = "-".join(sorted([ c for c in mega_state_components ]))
 
             if mega_state_name in self.states.keys():
-                self.add_transition(parent, mega_state_name, key)
+                self.AddTransition(parent, mega_state_name, key)
                 continue
             
-            mega_state = self.create_mega_state(mega_state_name)
+            mega_state = self.CreateMegaState(mega_state_name)
             mega_state.name = mega_state_name
 
             if parent is not None:
-                self.add_transition(parent, mega_state.name, key)
+                self.AddTransition(parent, mega_state.name, key)
             else:
-                self.entry_state = mega_state_name
-                mega_state.isEntry = True
+                self.entryState = mega_state_name
 
             for key, next_states in mega_state_transitions.items():
                 queue.append( (next_states, mega_state_name, key) )
