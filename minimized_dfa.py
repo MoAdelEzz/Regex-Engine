@@ -24,7 +24,9 @@ class MinDfa:
         return set(destination_1) == set(destination_2)
     
     def Split(self, group: set[str]):
-        split_groups = []
+
+
+        split_groups = [ set() ]
         representative = next(iter(group))
         current_group = { representative }
 
@@ -38,8 +40,9 @@ class MinDfa:
             if isSame:
                 current_group.add(state)
             else:
-                split_groups.append({state})
+                split_groups[-1].add(state)
 
+        if len(split_groups[-1]) == 0: split_groups.pop()
         return split_groups + [ current_group ]
 
     def Minimize(self):

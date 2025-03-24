@@ -50,7 +50,7 @@ class DFA:
         return list(set(root))
     
     def ToJson(self: DFA):
-        name_id = { state.name: str(state.id) for state in self.states.values() }
+        name_id = { state.name: f"S{idx}" for idx, state in enumerate(self.states.values()) }
 
         return {
             "entryState": name_id[self.entryState],

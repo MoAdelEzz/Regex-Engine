@@ -25,4 +25,4 @@ def DrawSM(regex: str, stateMachine: dict, title: str=""):
                 dot.edge(state, dest, label=symbol)
 
     dot.attr(label=f"Regular Expression: {regex}", fontsize='20', labelloc='t', labeljust='c')
-    dot.render('nfa_graph', format='png', cleanup=True)
+    dot.render(title, format='png', cleanup=True)
