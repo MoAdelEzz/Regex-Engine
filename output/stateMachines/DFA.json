@@ -1,0 +1,44 @@
+{
+    "entryState": "S0",
+    "states": {
+        "S0": {
+            "isTerminatingState": false,
+            "a-z": [
+                "S1"
+            ],
+            "A-Z": [
+                "S2"
+            ]
+        },
+        "S1": {
+            "isTerminatingState": false,
+            "0-9": [
+                "S3"
+            ],
+            "a-z": [
+                "S1"
+            ],
+            "A-Z": [
+                "S2"
+            ]
+        },
+        "S2": {
+            "isTerminatingState": false,
+            "0-9": [
+                "S3"
+            ],
+            "a-z": [
+                "S1"
+            ],
+            "A-Z": [
+                "S2"
+            ]
+        },
+        "S3": {
+            "isTerminatingState": true,
+            "0-9": [
+                "S3"
+            ]
+        }
+    }
+}
